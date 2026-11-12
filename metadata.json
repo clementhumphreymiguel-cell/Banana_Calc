@@ -1,0 +1,6 @@
+{
+  "name": "Weight Tally Calculator",
+  "description": "Fast, modern weight tally calculator with custom numeric keypad, .5 shortcut, instant automatic sum, and real-time multiplier calculations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
