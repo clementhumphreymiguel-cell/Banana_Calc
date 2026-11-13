@@ -21,6 +21,7 @@ export const SavedListsModal: React.FC<SavedListsModalProps> = ({
   onClearAllLists,
 }) => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
 
   if (!isOpen) return null;
 
@@ -71,22 +72,43 @@ export const SavedListsModal: React.FC<SavedListsModalProps> = ({
 
           <div className="flex items-center gap-2">
             {savedLists.length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (window.confirm('Delete all saved lists?')) {
-                    onClearAllLists();
-                  }
-                }}
-                className="text-[11px] text-rose-400 hover:text-rose-300 px-2 py-1 rounded hover:bg-rose-950/30 transition-colors cursor-pointer"
-              >
-                Clear All
-              </button>
+              confirmClearAll ? (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClearAllLists();
+                      setConfirmClearAll(false);
+                    }}
+                    className="text-[11px] bg-rose-600 text-white font-bold px-2 py-1 rounded cursor-pointer"
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmClearAll(false)}
+                    className="text-[11px] text-zinc-400 hover:text-white px-1.5 py-1 rounded cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmClearAll(true)}
+                  className="text-[11px] text-rose-400 hover:text-rose-300 px-2 py-1 rounded hover:bg-rose-950/30 transition-colors cursor-pointer"
+                >
+                  Clear All
+                </button>
+              )
             )}
             <button
               type="button"
-              onClick={onClose}
-              className="p-1 text-zinc-400 hover:text-white"
+              onClick={() => {
+                setConfirmClearAll(false);
+                onClose();
+              }}
+              className="p-1 text-zinc-400 hover:text-white cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, RotateCcw, Copy, Check, Hash, Scale, Undo2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, RotateCcw, Copy, Undo2, Trash2 } from 'lucide-react';
 import { formatNumber } from '../utils/format';
 
 interface SettingsModalProps {
@@ -8,6 +8,7 @@ interface SettingsModalProps {
   multiplier: number;
   onMultiplierChange: (mult: number) => void;
   onClearSheet: () => void;
+  onResetAll: () => void;
   onUndo: () => void;
   canUndo: boolean;
   columnsData: (number | null)[][];
@@ -20,6 +21,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   multiplier,
   onMultiplierChange,
   onClearSheet,
+  onResetAll,
   onUndo,
   canUndo,
   columnsData,
@@ -27,6 +29,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const [multInput, setMultInput] = useState(multiplier.toString());
   const [copied, setCopied] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<'clear' | 'reset' | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setMultInput(multiplier.toString());
+      setConfirmAction(null);
+      setCopied(false);
+    }
+  }, [isOpen, multiplier]);
 
   if (!isOpen) return null;
 
@@ -39,10 +50,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const handleCopySummary = async () => {
-    // Generate text summary
     const lines = [
       '=== WEIGHING TALLY SHEET ===',
-      `Columns:`,
+      'Columns:',
     ];
 
     columnsData.forEach((col, idx) => {
@@ -51,9 +61,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       lines.push(`Col ${idx + 1} (Sum: ${colSum}): ${nums.join(', ') || 'empty'}`);
     });
 
-    lines.push(`---------------------------`);
-    lines.push(`OVERALL TOTAL WEIGHT: ${formatNumber(overallTotal)}`);
-    if (multiplier > 1) {
+    lines.push('---------------------------');
+    lines.push(`TOTAL WEIGHT: ${formatNumber(overallTotal)}`);
+    if (multiplier !== 1) {
       lines.push(`MULTIPLIER: ×${multiplier}`);
       lines.push(`FINAL RESULT: ${formatNumber(overallTotal * multiplier)}`);
     }
@@ -78,7 +88,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 text-zinc-400 hover:text-white transition-colors"
+            className="p-1 text-zinc-400 hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -97,6 +107,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <input
                 type="number"
                 step="any"
+                min="0"
                 value={multInput}
                 onChange={(e) => setMultInput(e.target.value)}
                 placeholder="1"
@@ -110,10 +121,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               Set
             </button>
           </div>
-          {multiplier > 1 && (
+          {multiplier !== 1 && (
             <div className="text-[11px] text-zinc-400 mt-1.5 font-mono">
-              Calculated: {formatNumber(overallTotal)} × {multiplier} ={' '}
-              <strong className="text-white">{formatNumber(overallTotal * multiplier)}</strong>
+              ({formatNumber(overallTotal)} × {formatNumber(multiplier)} ={' '}
+              <strong className="text-white">{formatNumber(overallTotal * multiplier)}</strong>)
             </div>
           )}
         </form>
@@ -142,19 +153,71 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <span>Undo Last Number</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              if (window.confirm('Clear all numbers on this sheet?')) {
-                onClearSheet();
-                onClose();
-              }
-            }}
-            className="w-full py-2 px-3 bg-zinc-900 hover:bg-rose-950/40 text-rose-400 hover:text-rose-300 border border-zinc-800 rounded-xl text-xs font-semibold flex items-center gap-2 text-left cursor-pointer transition-colors"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Clear All Numbers</span>
-          </button>
+          {/* Clear All Numbers (2-tap inline confirmation, no window.confirm) */}
+          {confirmAction === 'clear' ? (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  onClearSheet();
+                  setConfirmAction(null);
+                  onClose();
+                }}
+                className="flex-1 py-2 px-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors"
+              >
+                Confirm Clear Numbers
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmAction(null)}
+                className="py-2 px-3 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded-xl text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmAction('clear')}
+              className="w-full py-2 px-3 bg-zinc-900 hover:bg-rose-950/40 text-rose-400 hover:text-rose-300 border border-zinc-800 rounded-xl text-xs font-semibold flex items-center gap-2 text-left cursor-pointer transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Clear All Numbers</span>
+            </button>
+          )}
+
+          {/* Reset Sheet & Multiplier (2-tap inline confirmation, no window.confirm) */}
+          {confirmAction === 'reset' ? (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  onResetAll();
+                  setConfirmAction(null);
+                  onClose();
+                }}
+                className="flex-1 py-2 px-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors"
+              >
+                Confirm Reset All
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmAction(null)}
+                className="py-2 px-3 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded-xl text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmAction('reset')}
+              className="w-full py-2 px-3 bg-zinc-900 hover:bg-rose-950/40 text-rose-400 hover:text-rose-300 border border-zinc-800 rounded-xl text-xs font-semibold flex items-center gap-2 text-left cursor-pointer transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset (Clear & Reset Multiplier)</span>
+            </button>
+          )}
         </div>
 
         {/* Done */}

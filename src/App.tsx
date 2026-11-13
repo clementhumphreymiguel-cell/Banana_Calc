@@ -242,6 +242,14 @@ export default function App() {
     setCurrentBuffer('');
   };
 
+  // Reset sheet and multiplier back to default (1)
+  const handleResetAll = () => {
+    pushHistory(createEmptyGrid());
+    setMultiplier(1);
+    setActiveCell([0, 0]);
+    setCurrentBuffer('');
+  };
+
   // Save current list
   const handleSaveList = (name: string) => {
     const now = new Date();
@@ -474,12 +482,12 @@ export default function App() {
         <div className="w-full h-[1px] bg-white mb-1.5" />
 
         {/* Total Readout */}
-        <div className="flex items-center justify-between px-1 h-8">
-          <div className="flex-1 text-center font-bold text-xl sm:text-2xl font-mono tracking-tight text-white tabular-nums">
-            Total: {formatNumber(calculatedResult)}
-            {multiplier > 1 && (
-              <span className="text-xs text-zinc-400 font-normal ml-2">
-                ({formatNumber(overallTotal)} × {multiplier})
+        <div className="flex items-center justify-between px-1 min-h-8">
+          <div className="flex-1 text-center font-bold text-xl sm:text-2xl font-mono tracking-tight text-white tabular-nums flex flex-wrap items-baseline justify-center gap-x-2">
+            <span>Total: {formatNumber(overallTotal)}</span>
+            {multiplier !== 1 && (
+              <span className="text-xs sm:text-sm text-zinc-400 font-normal">
+                ({formatNumber(overallTotal)} × {formatNumber(multiplier)} = {formatNumber(calculatedResult)})
               </span>
             )}
           </div>
@@ -626,6 +634,7 @@ export default function App() {
         multiplier={multiplier}
         onMultiplierChange={setMultiplier}
         onClearSheet={handleClearSheet}
+        onResetAll={handleResetAll}
         onUndo={handleUndo}
         canUndo={historyStack.length > 0}
         columnsData={grid}
