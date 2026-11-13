@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, BookmarkCheck } from 'lucide-react';
 import { formatNumber } from '../utils/format';
 
@@ -9,6 +9,7 @@ interface SaveListModalProps {
   totalWeight: number;
   multiplier: number;
   calculatedTotal: number;
+  initialName?: string | null;
 }
 
 const SUGGESTIONS = [
@@ -29,8 +30,15 @@ export const SaveListModal: React.FC<SaveListModalProps> = ({
   totalWeight,
   multiplier,
   calculatedTotal,
+  initialName,
 }) => {
-  const [name, setName] = useState('');
+  const [name, setName] = useState(initialName || '');
+
+  useEffect(() => {
+    if (isOpen) {
+      setName(initialName || '');
+    }
+  }, [isOpen, initialName]);
 
   if (!isOpen) return null;
 

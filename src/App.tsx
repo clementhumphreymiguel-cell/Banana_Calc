@@ -14,6 +14,7 @@ import { formatNumber, applyHalfShortcut, preciseSum, preciseProduct } from './u
 const STORAGE_GRID_KEY = 'monochrome_20col_grid_v4';
 const STORAGE_MULT_KEY = 'monochrome_20col_mult_v4';
 const STORAGE_LISTS_KEY = 'monochrome_saved_lists_v4';
+const STORAGE_ACTIVE_NAME_KEY = 'monochrome_20col_active_name_v4';
 
 // 20 columns total (2 tiers of 10 columns each), each with 5 rows
 const NUM_COLS = 20;
@@ -62,6 +63,16 @@ export default function App() {
     return [];
   });
 
+  // Active loaded list name (null when starting a blank/unsaved sheet)
+  const [activeListName, setActiveListName] = useState<string | null>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_ACTIVE_NAME_KEY);
+      return saved || null;
+    } catch {
+      return null;
+    }
+  });
+
   // Active cell coordinate [colIndex, rowIndex]
   const [activeCell, setActiveCell] = useState<[number, number]>([0, 0]);
 
@@ -94,6 +105,16 @@ export default function App() {
       localStorage.setItem(STORAGE_LISTS_KEY, JSON.stringify(savedLists));
     } catch {}
   }, [savedLists]);
+
+  useEffect(() => {
+    try {
+      if (activeListName) {
+        localStorage.setItem(STORAGE_ACTIVE_NAME_KEY, activeListName);
+      } else {
+        localStorage.removeItem(STORAGE_ACTIVE_NAME_KEY);
+      }
+    } catch {}
+  }, [activeListName]);
 
   // Calculate sum for each of the 20 columns
   // Rule: If a column has all 5 numbers, show the sum of all 5 numbers!
@@ -238,6 +259,7 @@ export default function App() {
   // Clear sheet completely
   const handleClearSheet = () => {
     pushHistory(createEmptyGrid());
+    setActiveListName(null);
     setActiveCell([0, 0]);
     setCurrentBuffer('');
   };
@@ -246,6 +268,7 @@ export default function App() {
   const handleResetAll = () => {
     pushHistory(createEmptyGrid());
     setMultiplier(1);
+    setActiveListName(null);
     setActiveCell([0, 0]);
     setCurrentBuffer('');
   };
@@ -288,9 +311,21 @@ export default function App() {
         return Array(NUM_ROWS).fill(null);
       });
 
+    // Find first empty cell so user can keep adding immediately
+    let nextCell: [number, number] = [0, 0];
+    outer: for (let c = 0; c < NUM_COLS; c++) {
+      for (let r = 0; r < NUM_ROWS; r++) {
+        if (loadedGrid[c][r] === null) {
+          nextCell = [c, r];
+          break outer;
+        }
+      }
+    }
+
     pushHistory(loadedGrid);
     setMultiplier(list.multiplier);
-    setActiveCell([0, 0]);
+    setActiveListName(list.name);
+    setActiveCell(nextCell);
     setCurrentBuffer('');
   };
 
@@ -418,13 +453,13 @@ export default function App() {
 
   return (
     <div className="h-dvh max-h-screen w-full max-w-[430px] mx-auto bg-black text-white flex flex-col justify-between overflow-hidden select-none px-3 pt-1.5 pb-3 font-sans">
-      {/* TOP BAR: Upper-Left Lists Button, Upper-Right Save & Settings */}
-      <div className="flex items-center justify-between h-8 shrink-0 px-0.5">
+      {/* TOP BAR: Upper-Left Lists Button, Center Loaded List Name, Upper-Right Save & Settings */}
+      <div className="flex items-center justify-between gap-2 h-8 shrink-0 px-0.5">
         {/* Upper-Left: Saved Lists Button */}
         <button
           type="button"
           onClick={() => setSavedListsOpen(true)}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-white/70 bg-black text-white hover:bg-white hover:text-black transition-colors cursor-pointer text-xs font-bold"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-white/70 bg-black text-white hover:bg-white hover:text-black transition-colors cursor-pointer text-xs font-bold shrink-0"
           title="View Saved Lists & Weights"
         >
           <ListFilter className="w-3.5 h-3.5" />
@@ -436,8 +471,20 @@ export default function App() {
           )}
         </button>
 
+        {/* Center: Loaded List Name */}
+        <div className="flex-1 min-w-0 text-center">
+          {activeListName && (
+            <span
+              className="block text-xs sm:text-sm font-bold text-white truncate"
+              title={activeListName}
+            >
+              {activeListName}
+            </span>
+          )}
+        </div>
+
         {/* Upper-Right: Save Button & Settings Gear */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={() => setSaveListModalOpen(true)}
@@ -625,6 +672,7 @@ export default function App() {
         totalWeight={overallTotal}
         multiplier={multiplier}
         calculatedTotal={calculatedResult}
+        initialName={activeListName}
       />
 
       {/* Settings Modal (Gear icon) */}
