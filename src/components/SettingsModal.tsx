@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { X, RotateCcw, Copy, Undo2, Trash2 } from 'lucide-react';
-import { formatNumber } from '../utils/format';
+import { formatNumber, NUM_ROWS, preciseSum } from '../utils/format';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  sheetName: string;
   multiplier: number;
   onMultiplierChange: (mult: number) => void;
   onClearSheet: () => void;
@@ -18,6 +19,7 @@ interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
+  sheetName,
   multiplier,
   onMultiplierChange,
   onClearSheet,
@@ -41,30 +43,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSaveMultiplier = (e: React.FormEvent) => {
-    e.preventDefault();
-    const val = parseFloat(multInput);
+  const commitMultiplier = (raw: string) => {
+    const val = parseFloat(raw);
     if (Number.isFinite(val) && val >= 0) {
       onMultiplierChange(val);
     }
   };
 
+  const handleSaveMultiplier = (e: React.FormEvent) => {
+    e.preventDefault();
+    commitMultiplier(multInput);
+  };
+
   const handleCopySummary = async () => {
-    const lines = [
-      '=== WEIGHING TALLY SHEET ===',
-      'Columns:',
-    ];
+    const lines = [`=== ${sheetName.toUpperCase()} ===`, 'Columns:'];
 
     columnsData.forEach((col, idx) => {
       const nums = col.filter((n): n is number => n !== null);
-      const colSum = nums.length === 5 ? nums.reduce((a, b) => a + b, 0) : '---';
+      const colSum = nums.length === NUM_ROWS ? formatNumber(preciseSum(nums)) : '---';
       lines.push(`Col ${idx + 1} (Sum: ${colSum}): ${nums.join(', ') || 'empty'}`);
     });
 
     lines.push('---------------------------');
     lines.push(`TOTAL WEIGHT: ${formatNumber(overallTotal)}`);
     if (multiplier !== 1) {
-      lines.push(`MULTIPLIER: ×${multiplier}`);
+      lines.push(`MULTIPLIER: ×${formatNumber(multiplier)}`);
       lines.push(`FINAL RESULT: ${formatNumber(overallTotal * multiplier)}`);
     }
 
@@ -83,12 +86,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         aria-modal="true"
       >
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-          <span className="text-sm font-bold tracking-tight">Settings</span>
+        <div className="flex items-center justify-between pb-3 border-b border-zinc-800 gap-2">
+          <div className="min-w-0">
+            <span className="text-sm font-bold tracking-tight block">Settings</span>
+            <span className="text-[11px] text-zinc-400 truncate block">{sheetName}</span>
+          </div>
           <button
             type="button"
-            onClick={onClose}
-            className="p-1 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+            onClick={() => {
+              commitMultiplier(multInput);
+              onClose();
+            }}
+            className="p-1 text-zinc-400 hover:text-white transition-colors cursor-pointer shrink-0"
+            aria-label="Close"
           >
             <X className="w-4 h-4" />
           </button>
@@ -97,7 +107,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Multiplier setting */}
         <form onSubmit={handleSaveMultiplier} className="py-3 border-b border-zinc-800">
           <label className="text-xs font-semibold text-zinc-300 block mb-1.5">
-            Multiplier (Price / Factor):
+            Multiplier:
           </label>
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
@@ -109,7 +119,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 step="any"
                 min="0"
                 value={multInput}
-                onChange={(e) => setMultInput(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setMultInput(next);
+                  commitMultiplier(next);
+                }}
                 placeholder="1"
                 className="w-full bg-black border border-white/30 rounded-xl pl-7 pr-3 py-1.5 text-sm font-mono text-white focus:outline-none focus:border-white"
               />
@@ -123,8 +137,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
           {multiplier !== 1 && (
             <div className="text-[11px] text-zinc-400 mt-1.5 font-mono">
-              ({formatNumber(overallTotal)} × {formatNumber(multiplier)} ={' '}
-              <strong className="text-white">{formatNumber(overallTotal * multiplier)}</strong>)
+              (<strong className="text-white">{formatNumber(overallTotal)}</strong> ×{' '}
+              {formatNumber(multiplier)} = {formatNumber(overallTotal * multiplier)})
             </div>
           )}
         </form>
@@ -138,7 +152,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           >
             <span className="flex items-center gap-2">
               <Copy className="w-3.5 h-3.5 text-zinc-400" />
-              <span>Copy Sheet Summary</span>
+              <span>Copy Summary</span>
             </span>
             {copied && <span className="text-[10px] text-emerald-400 font-bold">Copied!</span>}
           </button>
@@ -150,10 +164,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             className="w-full py-2 px-3 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 border border-zinc-800 rounded-xl text-xs font-semibold flex items-center gap-2 text-left cursor-pointer transition-colors"
           >
             <Undo2 className="w-3.5 h-3.5 text-zinc-400" />
-            <span>Undo Last Number</span>
+            <span>Undo</span>
           </button>
 
-          {/* Clear All Numbers (2-tap inline confirmation, no window.confirm) */}
+          {/* Clear Numbers (2-tap inline confirmation) */}
           {confirmAction === 'clear' ? (
             <div className="flex items-center gap-1.5">
               <button
@@ -165,7 +179,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 }}
                 className="flex-1 py-2 px-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors"
               >
-                Confirm Clear Numbers
+                Confirm Clear
               </button>
               <button
                 type="button"
@@ -182,11 +196,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               className="w-full py-2 px-3 bg-zinc-900 hover:bg-rose-950/40 text-rose-400 hover:text-rose-300 border border-zinc-800 rounded-xl text-xs font-semibold flex items-center gap-2 text-left cursor-pointer transition-colors"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Clear All Numbers</span>
+              <span>Clear Numbers</span>
             </button>
           )}
 
-          {/* Reset Sheet & Multiplier (2-tap inline confirmation, no window.confirm) */}
+          {/* Reset Sheet & Multiplier (2-tap inline confirmation) */}
           {confirmAction === 'reset' ? (
             <div className="flex items-center gap-1.5">
               <button
@@ -198,7 +212,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 }}
                 className="flex-1 py-2 px-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors"
               >
-                Confirm Reset All
+                Confirm Reset
               </button>
               <button
                 type="button"
@@ -215,7 +229,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               className="w-full py-2 px-3 bg-zinc-900 hover:bg-rose-950/40 text-rose-400 hover:text-rose-300 border border-zinc-800 rounded-xl text-xs font-semibold flex items-center gap-2 text-left cursor-pointer transition-colors"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reset (Clear & Reset Multiplier)</span>
+              <span>Reset Sheet</span>
             </button>
           )}
         </div>
@@ -224,7 +238,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="pt-2 border-t border-zinc-800 flex justify-end">
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => {
+              commitMultiplier(multInput);
+              onClose();
+            }}
             className="w-full py-2 bg-white text-black font-bold text-xs rounded-xl hover:bg-zinc-200 cursor-pointer"
           >
             Done

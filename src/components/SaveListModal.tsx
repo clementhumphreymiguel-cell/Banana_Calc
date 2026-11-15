@@ -5,7 +5,7 @@ import { formatNumber } from '../utils/format';
 interface SaveListModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (name: string) => void;
+  onSave: (name: string, startNewSheet: boolean) => void;
   totalWeight: number;
   multiplier: number;
   calculatedTotal: number;
@@ -42,12 +42,10 @@ export const SaveListModal: React.FC<SaveListModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAction = (startNewSheet: boolean) => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    onSave(trimmed);
-    setName('');
+    onSave(trimmed, startNewSheet);
     onClose();
   };
 
@@ -61,81 +59,94 @@ export const SaveListModal: React.FC<SaveListModalProps> = ({
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-white p-1"
+          className="absolute top-4 right-4 text-zinc-400 hover:text-white p-1 cursor-pointer"
+          aria-label="Close"
         >
           <X className="w-4 h-4" />
         </button>
 
         <div className="flex items-center gap-2 mb-3">
-          <BookmarkCheck className="w-5 h-5 text-white" />
-          <h3 className="text-sm font-bold text-white">Save Current List</h3>
+          <BookmarkCheck className="w-5 h-5 text-white shrink-0" />
+          <h3 className="text-sm font-bold text-white leading-tight">Save Sheet</h3>
         </div>
 
-        {/* Summary preview */}
+        {/* Summary preview (Weight highlighted) */}
         <div className="bg-black border border-zinc-800 rounded-xl p-2.5 mb-3 text-xs font-mono">
           <div className="flex items-center justify-between font-bold">
             <span className="text-zinc-300">Total:</span>
-            <span className="text-white text-sm">{formatNumber(calculatedTotal)}</span>
+            <span className="text-white text-sm">{formatNumber(totalWeight)}</span>
           </div>
-          {multiplier > 1 && (
+          {multiplier !== 1 && (
             <div className="text-[10px] text-zinc-400 text-right mt-0.5">
-              ({formatNumber(totalWeight)} × {multiplier})
+              ({formatNumber(totalWeight)} × {formatNumber(multiplier)} ={' '}
+              {formatNumber(calculatedTotal)})
             </div>
           )}
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleAction(false);
+          }}
+          className="flex flex-col gap-3"
+        >
           <div>
             <label className="text-xs font-semibold text-zinc-300 block mb-1">
-              List Name:
+              Name:
             </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Tundan Good, Cardava RX..."
+              placeholder="Sheet name"
               autoFocus
               className="w-full bg-black border border-white/40 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-white"
             />
           </div>
 
           {/* Quick Suggestions */}
-          <div>
-            <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider block mb-1">
-              Suggestions:
-            </span>
-            <div className="flex flex-wrap gap-1">
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setName(s)}
-                  className={`px-2 py-0.5 rounded text-[11px] transition-colors cursor-pointer ${
-                    name === s
-                      ? 'bg-white text-black font-bold'
-                      : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800'
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
+          <div className="flex flex-wrap gap-1">
+            {SUGGESTIONS.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setName(s)}
+                className={`px-2 py-0.5 rounded text-[11px] transition-colors cursor-pointer ${
+                  name === s
+                    ? 'bg-white text-black font-bold'
+                    : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800'
+                }`}
+              >
+                {s}
+              </button>
+            ))}
           </div>
 
-          <div className="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-zinc-800">
+          <div className="flex flex-col gap-1.5 mt-1 pt-2 border-t border-zinc-800">
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={!name.trim()}
+                className="flex-1 py-2 rounded-xl text-xs font-bold bg-white text-black hover:bg-zinc-200 disabled:opacity-50 transition-colors cursor-pointer"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                disabled={!name.trim()}
+                onClick={() => handleAction(true)}
+                className="flex-1 py-2 rounded-xl text-xs font-bold border border-white/70 bg-black text-white hover:bg-zinc-900 disabled:opacity-50 transition-colors cursor-pointer"
+              >
+                Save & New
+              </button>
+            </div>
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-1.5 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white"
+              className="w-full py-1.5 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white cursor-pointer"
             >
               Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!name.trim()}
-              className="px-4 py-2 rounded-xl text-xs font-bold bg-white text-black hover:bg-zinc-200 disabled:opacity-50 transition-colors cursor-pointer"
-            >
-              Save & Start New
             </button>
           </div>
         </form>

@@ -3,118 +3,186 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Settings, Delete, CornerDownLeft, ListFilter, BookmarkPlus } from 'lucide-react';
 import { SettingsModal } from './components/SettingsModal';
-import { SavedListsModal } from './components/SavedListsModal';
+import { ListsModal } from './components/ListsModal';
 import { SaveListModal } from './components/SaveListModal';
-import { SavedTallyList } from './types/calculator';
-import { formatNumber, applyHalfShortcut, preciseSum, preciseProduct } from './utils/format';
+import { TallySheet } from './types/calculator';
+import {
+  NUM_ROWS,
+  createEmptyGrid,
+  getRequiredColumnCount,
+  normalizeGrid,
+  formatNumber,
+  applyHalfShortcut,
+  preciseSum,
+  preciseProduct,
+} from './utils/format';
 
-const STORAGE_GRID_KEY = 'monochrome_20col_grid_v4';
-const STORAGE_MULT_KEY = 'monochrome_20col_mult_v4';
-const STORAGE_LISTS_KEY = 'monochrome_saved_lists_v4';
-const STORAGE_ACTIVE_NAME_KEY = 'monochrome_20col_active_name_v4';
+const STORAGE_SHEETS_KEY = 'tally_sheets_v1';
+const STORAGE_ACTIVE_SHEET_KEY = 'tally_active_sheet_v1';
+const LEGACY_SESSIONS_KEY = 'tally_sessions_v1';
 
-// 20 columns total (2 tiers of 10 columns each), each with 5 rows
-const NUM_COLS = 20;
-const NUM_ROWS = 5;
-
-// Pure empty 20-column by 5-row sheet with zero pre-filled template numbers
-const createEmptyGrid = (): (number | null)[][] => {
-  return Array(NUM_COLS)
-    .fill(null)
-    .map(() => Array(NUM_ROWS).fill(null));
+const formatDateString = (ts: number = Date.now()): string => {
+  const d = new Date(ts);
+  return `${d.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  })} · ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
 };
 
-export default function App() {
-  // 20 columns, each with 5 rows - Starts completely blank
-  const [grid, setGrid] = useState<(number | null)[][]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_GRID_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length === NUM_COLS) {
-          return parsed;
-        }
+const createNewSheet = (name: string): TallySheet => {
+  const now = Date.now();
+  return {
+    id: `sheet_${now}_${Math.random().toString(36).slice(2, 6)}`,
+    name,
+    timestamp: now,
+    dateString: formatDateString(now),
+    grid: createEmptyGrid(),
+    multiplier: 1,
+  };
+};
+
+const findFirstEmptyCell = (grid: (number | null)[][]): [number, number] => {
+  for (let c = 0; c < grid.length; c++) {
+    for (let r = 0; r < NUM_ROWS; r++) {
+      if (grid[c][r] === null) {
+        return [c, r];
       }
-    } catch {}
-    return createEmptyGrid();
-  });
-
-  // Multiplier (default 1)
-  const [multiplier, setMultiplier] = useState<number>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_MULT_KEY);
-      if (saved !== null) {
-        const val = parseFloat(saved);
-        if (Number.isFinite(val) && val >= 0) return val;
-      }
-    } catch {}
-    return 1;
-  });
-
-  // Saved lists history
-  const [savedLists, setSavedLists] = useState<SavedTallyList[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_LISTS_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return [];
-  });
-
-  // Active loaded list name (null when starting a blank/unsaved sheet)
-  const [activeListName, setActiveListName] = useState<string | null>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_ACTIVE_NAME_KEY);
-      return saved || null;
-    } catch {
-      return null;
     }
+  }
+  return [grid.length, 0];
+};
+
+function sanitizeSheets(rawSheets: unknown): TallySheet[] {
+  if (!Array.isArray(rawSheets) || rawSheets.length === 0) return [];
+  return rawSheets.map((item, idx) => {
+    const sheet = item as Partial<TallySheet>;
+    return {
+      id: sheet?.id || `sheet_${Date.now()}_${idx}`,
+      name: sheet?.name || `Sheet ${idx + 1}`,
+      timestamp: typeof sheet?.timestamp === 'number' ? sheet.timestamp : Date.now(),
+      dateString: sheet?.dateString || formatDateString(),
+      grid: normalizeGrid(sheet?.grid),
+      multiplier:
+        typeof sheet?.multiplier === 'number' &&
+        Number.isFinite(sheet.multiplier) &&
+        sheet.multiplier >= 0
+          ? sheet.multiplier
+          : 1,
+    };
   });
+}
+
+function loadInitialSheets(): TallySheet[] {
+  try {
+    const saved = localStorage.getItem(STORAGE_SHEETS_KEY);
+    if (saved) {
+      const sanitized = sanitizeSheets(JSON.parse(saved));
+      if (sanitized.length > 0) return sanitized;
+    }
+
+    // Migrate sheets if upgrading from session storage
+    const legacySessions = localStorage.getItem(LEGACY_SESSIONS_KEY);
+    if (legacySessions) {
+      const parsedSessions = JSON.parse(legacySessions);
+      if (Array.isArray(parsedSessions)) {
+        const collected: unknown[] = [];
+        parsedSessions.forEach((s) => {
+          if (s && Array.isArray(s.sheets)) {
+            collected.push(...s.sheets);
+          }
+        });
+        const sanitized = sanitizeSheets(collected);
+        if (sanitized.length > 0) return sanitized;
+      }
+    }
+  } catch {}
+
+  return [createNewSheet('Sheet 1')];
+}
+
+export default function App() {
+  const [sheets, setSheets] = useState<TallySheet[]>(loadInitialSheets);
+
+  const [activeSheetId, setActiveSheetId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_ACTIVE_SHEET_KEY);
+      if (saved) return saved;
+    } catch {}
+    return '';
+  });
+
+  const activeSheet = useMemo(
+    () => sheets.find((sh) => sh.id === activeSheetId) || sheets[0],
+    [sheets, activeSheetId]
+  );
 
   // Active cell coordinate [colIndex, rowIndex]
-  const [activeCell, setActiveCell] = useState<[number, number]>([0, 0]);
+  const [activeCell, setActiveCell] = useState<[number, number]>(() =>
+    findFirstEmptyCell(normalizeGrid(activeSheet.grid))
+  );
+
+  const requiredCols = useMemo(
+    () => getRequiredColumnCount(activeSheet.grid, activeCell[0]),
+    [activeSheet.grid, activeCell]
+  );
+
+  const grid = useMemo(
+    () => normalizeGrid(activeSheet.grid, requiredCols),
+    [activeSheet.grid, requiredCols]
+  );
+  const multiplier = activeSheet.multiplier;
+
+  const activeCellRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    activeCellRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [activeCell]);
 
   // Current buffer being typed on the keypad
   const [currentBuffer, setCurrentBuffer] = useState<string>('');
 
-  // History stack for Undo
+  // History stack for Undo (per active sheet editing session)
   const [historyStack, setHistoryStack] = useState<(number | null)[][][]>([]);
 
   // Modals
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
-  const [savedListsOpen, setSavedListsOpen] = useState<boolean>(false);
+  const [listsModalOpen, setListsModalOpen] = useState<boolean>(false);
   const [saveListModalOpen, setSaveListModalOpen] = useState<boolean>(false);
 
   // Sync to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_GRID_KEY, JSON.stringify(grid));
+      localStorage.setItem(STORAGE_SHEETS_KEY, JSON.stringify(sheets));
     } catch {}
-  }, [grid]);
+  }, [sheets]);
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_MULT_KEY, multiplier.toString());
+      localStorage.setItem(STORAGE_ACTIVE_SHEET_KEY, activeSheet.id);
     } catch {}
-  }, [multiplier]);
+  }, [activeSheet.id]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_LISTS_KEY, JSON.stringify(savedLists));
-    } catch {}
-  }, [savedLists]);
-
-  useEffect(() => {
-    try {
-      if (activeListName) {
-        localStorage.setItem(STORAGE_ACTIVE_NAME_KEY, activeListName);
-      } else {
-        localStorage.removeItem(STORAGE_ACTIVE_NAME_KEY);
-      }
-    } catch {}
-  }, [activeListName]);
+  // Helper to update the active sheet
+  const updateActiveSheet = useCallback(
+    (updater: (sheet: TallySheet) => TallySheet) => {
+      const now = Date.now();
+      const dateString = formatDateString(now);
+      setSheets((prev) =>
+        prev.map((sheet) => {
+          if (sheet.id !== activeSheet.id) return sheet;
+          const updated = updater(sheet);
+          return {
+            ...updated,
+            timestamp: now,
+            dateString,
+          };
+        })
+      );
+    },
+    [activeSheet.id]
+  );
 
   // Calculate sum for each of the 20 columns
   // Rule: If a column has all 5 numbers, show the sum of all 5 numbers!
@@ -129,7 +197,7 @@ export default function App() {
     });
   }, [grid]);
 
-  // Overall Total Weight: sum of all numbers currently on the 20-column sheet
+  // Overall Total Weight: sum of all numbers currently on this 20-column sheet
   const overallTotal = useMemo(() => {
     const allNumbers: number[] = [];
     grid.forEach((col) => {
@@ -142,31 +210,17 @@ export default function App() {
     return preciseSum(allNumbers);
   }, [grid]);
 
-  // Total entries count on sheet
-  const currentEntriesCount = useMemo(() => {
-    let count = 0;
-    grid.forEach((col) => {
-      col.forEach((val) => {
-        if (val !== null) count++;
-      });
-    });
-    return count;
-  }, [grid]);
-
-  // Final calculated total with multiplier
+  // Final calculated result for this sheet using its own multiplier
   const calculatedResult = useMemo(() => {
     return preciseProduct(overallTotal, multiplier);
   }, [overallTotal, multiplier]);
 
-  // Auto-advance: Move down the column (row 0 to 4), then move to the next column
+  // Auto-advance: Move down the column (row 0 to 4), then move to the next column (expanding by 10 as needed)
   const getNextCell = (col: number, row: number): [number, number] => {
     if (row + 1 < NUM_ROWS) {
       return [col, row + 1];
     }
-    if (col + 1 < NUM_COLS) {
-      return [col + 1, 0];
-    }
-    return [col, row]; // last cell (col 19, row 4)
+    return [col + 1, 0];
   };
 
   const getPrevCell = (col: number, row: number): [number, number] => {
@@ -179,23 +233,25 @@ export default function App() {
     return [0, 0];
   };
 
-  const pushHistory = (newGrid: (number | null)[][]) => {
-    setHistoryStack((prev) => [...prev.slice(-30), grid]);
-    setGrid(newGrid);
-  };
+  const pushHistory = useCallback(
+    (newGrid: (number | null)[][]) => {
+      setHistoryStack((prev) => [...prev.slice(-30), grid]);
+      updateActiveSheet((sheet) => ({ ...sheet, grid: newGrid }));
+    },
+    [grid, updateActiveSheet]
+  );
 
   const handleUndo = () => {
     if (historyStack.length === 0) return;
     const previous = historyStack[historyStack.length - 1];
     setHistoryStack((prev) => prev.slice(0, -1));
-    setGrid(previous);
+    updateActiveSheet((sheet) => ({ ...sheet, grid: previous }));
     setCurrentBuffer('');
   };
 
   // Commit currentBuffer into activeCell
   const commitBuffer = useCallback(() => {
     if (!currentBuffer) {
-      // Advance to next cell
       const [c, r] = activeCell;
       setActiveCell(getNextCell(c, r));
       return;
@@ -215,7 +271,7 @@ export default function App() {
     pushHistory(newGrid);
     setCurrentBuffer('');
     setActiveCell(getNextCell(c, r));
-  }, [activeCell, currentBuffer, grid]);
+  }, [activeCell, currentBuffer, grid, pushHistory]);
 
   // Keypad click handlers
   const handleDigit = useCallback((digit: string) => {
@@ -234,7 +290,6 @@ export default function App() {
     if (currentBuffer.length > 0) {
       setCurrentBuffer((prev) => (prev.length <= 1 ? '' : prev.slice(0, -1)));
     } else {
-      // Erase activeCell or go to previous cell
       const [c, r] = activeCell;
       if (grid[c][r] !== null) {
         const newGrid = grid.map((col, cIdx) =>
@@ -250,89 +305,105 @@ export default function App() {
         pushHistory(newGrid);
       }
     }
-  }, [currentBuffer, activeCell, grid]);
+  }, [currentBuffer, activeCell, grid, pushHistory]);
 
   const handleClear = useCallback(() => {
     setCurrentBuffer('');
   }, []);
 
-  // Clear sheet completely
+  // Multiplier change for current sheet only
+  const handleMultiplierChange = (newMult: number) => {
+    updateActiveSheet((sheet) => ({ ...sheet, multiplier: newMult }));
+  };
+
+  // Clear current sheet numbers completely (keeps sheet name & multiplier)
   const handleClearSheet = () => {
     pushHistory(createEmptyGrid());
-    setActiveListName(null);
     setActiveCell([0, 0]);
     setCurrentBuffer('');
   };
 
-  // Reset sheet and multiplier back to default (1)
+  // Reset current sheet numbers and multiplier back to default (1)
   const handleResetAll = () => {
-    pushHistory(createEmptyGrid());
-    setMultiplier(1);
-    setActiveListName(null);
+    setHistoryStack((prev) => [...prev.slice(-30), grid]);
+    updateActiveSheet((sheet) => ({
+      ...sheet,
+      grid: createEmptyGrid(),
+      multiplier: 1,
+    }));
     setActiveCell([0, 0]);
     setCurrentBuffer('');
   };
 
-  // Save current list
-  const handleSaveList = (name: string) => {
-    const now = new Date();
-    const dateString = `${now.toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-    })} · ${now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
+  // Save current sheet name & optionally create/open a new blank sheet
+  const handleSaveSheet = (name: string, startNewSheet: boolean) => {
+    const now = Date.now();
+    const dateString = formatDateString(now);
 
-    const newList: SavedTallyList = {
-      id: `list_${Date.now()}`,
-      name,
-      timestamp: Date.now(),
-      dateString,
-      grid: grid.map((col) => [...col]),
-      totalWeight: overallTotal,
-      multiplier,
-      calculatedTotal: calculatedResult,
-      totalEntries: currentEntriesCount,
-    };
-
-    setSavedLists((prev) => [newList, ...prev]);
-
-    // Clear current sheet to immediately start next list
-    handleClearSheet();
+    if (startNewSheet) {
+      const nextSheet = createNewSheet(`Sheet ${sheets.length + 1}`);
+      setSheets((prev) => [
+        ...prev.map((sheet) =>
+          sheet.id === activeSheet.id
+            ? { ...sheet, name, timestamp: now, dateString }
+            : sheet
+        ),
+        nextSheet,
+      ]);
+      setActiveSheetId(nextSheet.id);
+      setActiveCell([0, 0]);
+      setCurrentBuffer('');
+      setHistoryStack([]);
+    } else {
+      updateActiveSheet((sheet) => ({ ...sheet, name }));
+    }
   };
 
-  // Load a saved list onto the sheet
-  const handleLoadList = (list: SavedTallyList) => {
-    // If list has fewer columns, pad to 20
-    const loadedGrid = Array(NUM_COLS)
-      .fill(null)
-      .map((_, colIdx) => {
-        if (list.grid[colIdx]) {
-          return [...list.grid[colIdx]];
-        }
-        return Array(NUM_ROWS).fill(null);
-      });
-
-    // Find first empty cell so user can keep adding immediately
-    let nextCell: [number, number] = [0, 0];
-    outer: for (let c = 0; c < NUM_COLS; c++) {
-      for (let r = 0; r < NUM_ROWS; r++) {
-        if (loadedGrid[c][r] === null) {
-          nextCell = [c, r];
-          break outer;
-        }
-      }
-    }
-
-    pushHistory(loadedGrid);
-    setMultiplier(list.multiplier);
-    setActiveListName(list.name);
-    setActiveCell(nextCell);
+  // Sheet CRUD handlers
+  const handleOpenSheet = (sheetId: string) => {
+    const target = sheets.find((sh) => sh.id === sheetId);
+    if (!target) return;
+    setActiveSheetId(target.id);
+    setActiveCell(findFirstEmptyCell(normalizeGrid(target.grid)));
     setCurrentBuffer('');
+    setHistoryStack([]);
+  };
+
+  const handleCreateSheet = (name: string) => {
+    const newSheet = createNewSheet(name);
+    setSheets((prev) => [...prev, newSheet]);
+    setActiveSheetId(newSheet.id);
+    setActiveCell([0, 0]);
+    setCurrentBuffer('');
+    setHistoryStack([]);
+  };
+
+  const handleRenameSheet = (sheetId: string, newName: string) => {
+    setSheets((prev) =>
+      prev.map((sheet) =>
+        sheet.id === sheetId ? { ...sheet, name: newName } : sheet
+      )
+    );
+  };
+
+  const handleDeleteSheet = (sheetId: string) => {
+    const remaining = sheets.filter((sh) => sh.id !== sheetId);
+    const nextSheets = remaining.length > 0 ? remaining : [createNewSheet('Sheet 1')];
+    setSheets(nextSheets);
+
+    if (activeSheet.id === sheetId) {
+      const fallback = nextSheets[0];
+      setActiveSheetId(fallback.id);
+      setActiveCell(findFirstEmptyCell(normalizeGrid(fallback.grid)));
+      setCurrentBuffer('');
+      setHistoryStack([]);
+    }
   };
 
   // Physical keyboard listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (settingsOpen || savedListsOpen || saveListModalOpen) return;
+      if (settingsOpen || listsModalOpen || saveListModalOpen) return;
 
       if (e.key >= '0' && e.key <= '9') {
         e.preventDefault();
@@ -363,7 +434,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
     settingsOpen,
-    savedListsOpen,
+    listsModalOpen,
     saveListModalOpen,
     handleDigit,
     handleBackspace,
@@ -372,18 +443,39 @@ export default function App() {
     handleHalf,
   ]);
 
-  // Helper to render a 10-column block (Tier 1: cols 0-9; Tier 2: cols 10-19)
+  const tierSize = grid.length <= 5 ? 5 : 10;
+  const tierCount = Math.ceil(grid.length / tierSize);
+  const isSingleTier = tierCount === 1;
+
+  // Helper to render a column tier (5 columns initially, then 10-column tiers for 10, 20, 30, 40, 50...)
   const renderColumnTier = (startCol: number, endCol: number) => {
+    const colCount = endCol - startCol;
+    const gridColsClass = colCount === 5 ? 'grid-cols-5' : 'grid-cols-10';
+
+    const headerTextClass =
+      colCount === 5
+        ? 'text-sm sm:text-base px-1'
+        : isSingleTier
+        ? 'text-xs sm:text-sm px-0.5'
+        : 'text-[10px] sm:text-[11px] px-0.5';
+
+    const cellSizeClass =
+      colCount === 5
+        ? 'h-8 sm:h-9 text-base sm:text-lg px-1'
+        : isSingleTier
+        ? 'h-7 sm:h-8 text-xs sm:text-sm px-0.5'
+        : 'h-5 sm:h-6 text-[11px] sm:text-xs px-0.5';
+
     return (
       <div className="w-full flex flex-col">
         {/* Row of Column Totals */}
-        <div className="grid grid-cols-10 text-center items-center py-0.5">
+        <div className={`grid ${gridColsClass} text-center items-center py-0.5`}>
           {columnSums.slice(startCol, endCol).map((sum, i) => {
             const colIdx = startCol + i;
             return (
               <div
                 key={colIdx}
-                className="font-bold text-[10px] sm:text-[11px] font-mono tabular-nums text-white truncate px-0.5"
+                className={`font-bold font-mono tabular-nums text-white truncate ${headerTextClass}`}
                 title={`Column ${colIdx + 1} Total: ${sum !== null ? sum : 'incomplete'}`}
               >
                 {sum !== null ? formatNumber(sum) : '---'}
@@ -393,11 +485,11 @@ export default function App() {
         </div>
 
         {/* Horizontal Line separating Totals from Grid Numbers */}
-        <div className="w-full h-[1px] bg-white my-0.5" />
+        <div className="w-full h-[1.5px] bg-white my-0.5" />
 
-        {/* 10 Vertical Columns with Dividing Lines */}
-        <div className="grid grid-cols-10 divide-x divide-white">
-          {Array.from({ length: endCol - startCol }).map((_, i) => {
+        {/* Vertical Columns with Dividing Lines */}
+        <div className={`grid ${gridColsClass} divide-x divide-white/80`}>
+          {Array.from({ length: colCount }).map((_, i) => {
             const colIdx = startCol + i;
             return (
               <div key={colIdx} className="flex flex-col justify-start">
@@ -409,6 +501,7 @@ export default function App() {
                   return (
                     <button
                       key={rowIdx}
+                      ref={isActive ? activeCellRef : undefined}
                       type="button"
                       onClick={() => {
                         if (currentBuffer) {
@@ -417,7 +510,7 @@ export default function App() {
                         setActiveCell([colIdx, rowIdx]);
                         setCurrentBuffer('');
                       }}
-                      className={`h-5 sm:h-6 flex items-center justify-center font-mono text-[11px] sm:text-xs font-semibold transition-colors cursor-pointer relative px-0.5 ${
+                      className={`flex items-center justify-center font-mono font-semibold transition-colors cursor-pointer relative ${cellSizeClass} ${
                         isActive
                           ? 'text-white'
                           : val !== null
@@ -438,7 +531,7 @@ export default function App() {
 
                       {/* Active Cell Box Highlight */}
                       {isActive && !currentBuffer && (
-                        <span className="absolute inset-0.5 border border-dashed border-white/60 rounded pointer-events-none" />
+                        <span className="absolute inset-0.5 border border-dashed border-white/70 rounded pointer-events-none" />
                       )}
                     </button>
                   );
@@ -453,48 +546,41 @@ export default function App() {
 
   return (
     <div className="h-dvh max-h-screen w-full max-w-[430px] mx-auto bg-black text-white flex flex-col justify-between overflow-hidden select-none px-3 pt-1.5 pb-3 font-sans">
-      {/* TOP BAR: Upper-Left Lists Button, Center Loaded List Name, Upper-Right Save & Settings */}
-      <div className="flex items-center justify-between gap-2 h-8 shrink-0 px-0.5">
-        {/* Upper-Left: Saved Lists Button */}
+      {/* TOP BAR: Upper-Left Sheets Button, Center Sheet Name, Upper-Right Save & Settings */}
+      <div className="flex items-center justify-between gap-2 h-9 shrink-0 px-0.5">
+        {/* Upper-Left: Sheets / Lists Button */}
         <button
           type="button"
-          onClick={() => setSavedListsOpen(true)}
+          onClick={() => setListsModalOpen(true)}
           className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-white/70 bg-black text-white hover:bg-white hover:text-black transition-colors cursor-pointer text-xs font-bold shrink-0"
-          title="View Saved Lists & Weights"
+          title="Sheets & Overall Total"
         >
           <ListFilter className="w-3.5 h-3.5" />
-          <span>Lists</span>
-          {savedLists.length > 0 && (
-            <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] bg-white text-black font-mono font-bold">
-              {savedLists.length}
-            </span>
-          )}
+          <span>Sheets</span>
+          <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] bg-white text-black font-mono font-bold">
+            {sheets.length}
+          </span>
         </button>
 
-        {/* Center: Loaded List Name */}
-        <div className="flex-1 min-w-0 text-center">
-          {activeListName && (
-            <span
-              className="block text-xs sm:text-sm font-bold text-white truncate"
-              title={activeListName}
-            >
-              {activeListName}
-            </span>
-          )}
-        </div>
+        {/* Center: Active Sheet Name (Tap to switch) */}
+        <button
+          type="button"
+          onClick={() => setListsModalOpen(true)}
+          className="flex-1 min-w-0 text-center cursor-pointer hover:opacity-80 transition-opacity"
+          title={activeSheet.name}
+        >
+          <span className="block text-xs sm:text-sm font-bold text-white truncate">
+            {activeSheet.name}
+          </span>
+        </button>
 
-        {/* Upper-Right: Save Button & Settings Gear */}
+        {/* Upper-Right: Save Sheet Button & Settings Gear */}
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={() => setSaveListModalOpen(true)}
-            disabled={overallTotal === 0}
-            className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
-              overallTotal > 0
-                ? 'border-white bg-white text-black hover:bg-zinc-200'
-                : 'border-zinc-800 text-zinc-600 cursor-not-allowed bg-black'
-            }`}
-            title="Save this 20-column list"
+            className="flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-bold border border-white bg-white text-black hover:bg-zinc-200 transition-colors cursor-pointer"
+            title="Save sheet"
           >
             <BookmarkPlus className="w-3.5 h-3.5 stroke-[2.2]" />
             <span>SAVE</span>
@@ -505,21 +591,34 @@ export default function App() {
             onClick={() => setSettingsOpen(true)}
             className="p-1 text-white hover:text-zinc-300 transition-colors cursor-pointer"
             aria-label="Settings"
-            title="Settings (Multiplier, Clear, Summary)"
+            title="Settings"
           >
             <Settings className="w-5 h-5 stroke-[2.2]" />
           </button>
         </div>
       </div>
 
-      {/* UPPER HALF: 20 COLUMNS SPLIT INTO 2 TIERS OF 10 COLUMNS */}
-      <div className="flex-1 flex flex-col justify-around min-h-0 py-1">
-        {/* TIER 1: COLUMNS 1–10 (UPPER SCREEN) */}
-        {renderColumnTier(0, 10)}
-
-        {/* TIER 2: COLUMNS 11–20 (BETWEEN UPPER SCREEN AND HALF SCREEN/KEYPAD) */}
-        <div className="pt-1.5 border-t border-zinc-900">
-          {renderColumnTier(10, 20)}
+      {/* UPPER HALF: DYNAMIC COLUMNS (5 cols -> 10 cols -> 20 -> 30 -> 40 -> 50...) */}
+      <div className="flex-1 min-h-0 overflow-y-auto py-1">
+        <div
+          className={
+            tierCount <= 2
+              ? 'min-h-full flex flex-col justify-around gap-2'
+              : 'flex flex-col gap-3 pb-2'
+          }
+        >
+          {Array.from({ length: tierCount }).map((_, tierIdx) => {
+            const startCol = tierIdx * tierSize;
+            const endCol = Math.min(startCol + tierSize, grid.length);
+            return (
+              <div
+                key={tierIdx}
+                className={tierIdx > 0 ? 'pt-2 border-t border-zinc-800' : ''}
+              >
+                {renderColumnTier(startCol, endCol)}
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -528,28 +627,34 @@ export default function App() {
         {/* Horizontal Divider Line */}
         <div className="w-full h-[1px] bg-white mb-1.5" />
 
-        {/* Total Readout */}
-        <div className="flex items-center justify-between px-1 min-h-8">
+        {/* Total Readout & Delete Button */}
+        <div className="flex items-center justify-between gap-2 px-1 min-h-8">
           <div className="flex-1 text-center font-bold text-xl sm:text-2xl font-mono tracking-tight text-white tabular-nums flex flex-wrap items-baseline justify-center gap-x-2">
             <span>Total: {formatNumber(overallTotal)}</span>
             {multiplier !== 1 && (
               <span className="text-xs sm:text-sm text-zinc-400 font-normal">
-                ({formatNumber(overallTotal)} × {formatNumber(multiplier)} = {formatNumber(calculatedResult)})
+                ({formatNumber(overallTotal)} × {formatNumber(multiplier)} ={' '}
+                {formatNumber(calculatedResult)})
               </span>
             )}
           </div>
 
-          {/* Quick Backspace if typing buffer is active */}
-          {currentBuffer && (
-            <button
-              type="button"
-              onClick={handleBackspace}
-              className="px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-zinc-300 hover:text-white flex items-center gap-1 cursor-pointer shrink-0"
-              title="Backspace"
-            >
-              <Delete className="w-3.5 h-3.5" />
-            </button>
-          )}
+          {/* Delete / Backspace button (works for typing buffer AND committed cells) */}
+          <button
+            type="button"
+            onClick={handleBackspace}
+            disabled={
+              !currentBuffer &&
+              overallTotal === 0 &&
+              activeCell[0] === 0 &&
+              activeCell[1] === 0
+            }
+            className="px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 hover:border-white disabled:opacity-30 disabled:hover:border-zinc-700 rounded-lg text-xs text-white flex items-center justify-center cursor-pointer disabled:cursor-not-allowed shrink-0 transition-colors"
+            aria-label="Delete"
+            title="Delete"
+          >
+            <Delete className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
@@ -654,33 +759,36 @@ export default function App() {
 
       {/* --- Modals --- */}
 
-      {/* Upper-Left: Saved Lists Modal */}
-      <SavedListsModal
-        isOpen={savedListsOpen}
-        onClose={() => setSavedListsOpen(false)}
-        savedLists={savedLists}
-        onLoadList={handleLoadList}
-        onDeleteList={(id) => setSavedLists((prev) => prev.filter((l) => l.id !== id))}
-        onClearAllLists={() => setSavedLists([])}
+      {/* Upper-Left: Sheets & Overall Total Modal */}
+      <ListsModal
+        isOpen={listsModalOpen}
+        onClose={() => setListsModalOpen(false)}
+        sheets={sheets}
+        activeSheetId={activeSheet.id}
+        onOpenSheet={handleOpenSheet}
+        onCreateSheet={handleCreateSheet}
+        onRenameSheet={handleRenameSheet}
+        onDeleteSheet={handleDeleteSheet}
       />
 
-      {/* Upper-Right: Save List Modal (Asks for Name) */}
+      {/* Upper-Right: Save Sheet Modal */}
       <SaveListModal
         isOpen={saveListModalOpen}
         onClose={() => setSaveListModalOpen(false)}
-        onSave={handleSaveList}
+        onSave={handleSaveSheet}
         totalWeight={overallTotal}
         multiplier={multiplier}
         calculatedTotal={calculatedResult}
-        initialName={activeListName}
+        initialName={activeSheet.name}
       />
 
-      {/* Settings Modal (Gear icon) */}
+      {/* Settings Modal (Gear icon) - Per-Sheet Multiplier & Actions */}
       <SettingsModal
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
+        sheetName={activeSheet.name}
         multiplier={multiplier}
-        onMultiplierChange={setMultiplier}
+        onMultiplierChange={handleMultiplierChange}
         onClearSheet={handleClearSheet}
         onResetAll={handleResetAll}
         onUndo={handleUndo}
