@@ -111,7 +111,7 @@ export const ListsModal: React.FC<ListsModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/95 backdrop-blur-sm animate-in fade-in duration-100">
       <div
-        className="w-full max-w-[430px] bg-black border border-white/40 rounded-2xl p-3.5 shadow-2xl relative text-white flex flex-col h-[92vh] max-h-[92vh] overflow-hidden"
+        className="w-full max-w-[430px] bg-black border border-zinc-800 rounded-2xl p-3.5 shadow-2xl relative text-white flex flex-col h-[92dvh] max-h-[92dvh] overflow-hidden"
         role="dialog"
         aria-modal="true"
       >

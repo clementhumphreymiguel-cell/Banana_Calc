@@ -531,7 +531,7 @@ export default function App() {
 
                       {/* Active Cell Box Highlight */}
                       {isActive && !currentBuffer && (
-                        <span className="absolute inset-0.5 border border-dashed border-white/70 rounded pointer-events-none" />
+                        <span className="absolute inset-0.5 border border-white/75 bg-zinc-900/70 rounded-md pointer-events-none" />
                       )}
                     </button>
                   );
@@ -544,62 +544,65 @@ export default function App() {
     );
   };
 
+  const isDeleteDisabled =
+    !currentBuffer &&
+    overallTotal === 0 &&
+    activeCell[0] === 0 &&
+    activeCell[1] === 0;
+
   return (
-    <div className="h-dvh max-h-screen w-full max-w-[430px] mx-auto bg-black text-white flex flex-col justify-between overflow-hidden select-none px-3 pt-1.5 pb-3 font-sans">
-      {/* TOP BAR: Upper-Left Sheets Button, Center Sheet Name, Upper-Right Save & Settings */}
-      <div className="flex items-center justify-between gap-2 h-9 shrink-0 px-0.5">
-        {/* Upper-Left: Sheets / Lists Button */}
+    <div className="h-dvh w-full max-w-[430px] mx-auto sm:border-x sm:border-zinc-900 bg-black text-white flex flex-col justify-between overflow-hidden select-none px-3 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] font-sans">
+      {/* TOP BAR */}
+      <header className="flex items-center justify-between gap-2 h-10 shrink-0">
         <button
           type="button"
           onClick={() => setListsModalOpen(true)}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-white/70 bg-black text-white hover:bg-white hover:text-black transition-colors cursor-pointer text-xs font-bold shrink-0"
+          className="h-9 px-3 rounded-xl border border-zinc-800 bg-zinc-950 hover:border-zinc-600 text-white transition-colors cursor-pointer text-xs font-bold flex items-center gap-1.5 shrink-0"
           title="Sheets & Overall Total"
         >
-          <ListFilter className="w-3.5 h-3.5" />
+          <ListFilter className="w-3.5 h-3.5 text-zinc-300" />
           <span>Sheets</span>
-          <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] bg-white text-black font-mono font-bold">
+          <span className="px-1.5 py-0.2 rounded-md text-[10px] bg-white text-black font-mono font-bold">
             {sheets.length}
           </span>
         </button>
 
-        {/* Center: Active Sheet Name (Tap to switch) */}
         <button
           type="button"
           onClick={() => setListsModalOpen(true)}
-          className="flex-1 min-w-0 text-center cursor-pointer hover:opacity-80 transition-opacity"
+          className="flex-1 min-w-0 text-center cursor-pointer hover:opacity-80 transition-opacity px-1"
           title={activeSheet.name}
         >
-          <span className="block text-xs sm:text-sm font-bold text-white truncate">
+          <span className="block text-sm font-bold text-white truncate">
             {activeSheet.name}
           </span>
         </button>
 
-        {/* Upper-Right: Save Sheet Button & Settings Gear */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
             onClick={() => setSaveListModalOpen(true)}
-            className="flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-bold border border-white bg-white text-black hover:bg-zinc-200 transition-colors cursor-pointer"
+            className="h-9 px-3 rounded-xl text-xs font-bold bg-white text-black hover:bg-zinc-200 transition-colors cursor-pointer flex items-center gap-1"
             title="Save sheet"
           >
             <BookmarkPlus className="w-3.5 h-3.5 stroke-[2.2]" />
-            <span>SAVE</span>
+            <span>Save</span>
           </button>
 
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
-            className="p-1 text-white hover:text-zinc-300 transition-colors cursor-pointer"
+            className="h-9 w-9 rounded-xl border border-zinc-800 bg-zinc-950 hover:border-zinc-600 text-white flex items-center justify-center transition-colors cursor-pointer"
             aria-label="Settings"
             title="Settings"
           >
-            <Settings className="w-5 h-5 stroke-[2.2]" />
+            <Settings className="w-4 h-4 stroke-[2.2]" />
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* UPPER HALF: DYNAMIC COLUMNS (5 cols -> 10 cols -> 20 -> 30 -> 40 -> 50...) */}
-      <div className="flex-1 min-h-0 overflow-y-auto py-1">
+      {/* UPPER HALF: DYNAMIC COLUMNS (5 -> 10 -> 20 -> 30 -> 40 -> 50...) */}
+      <main className="flex-1 min-h-0 overflow-y-auto py-1.5">
         <div
           className={
             tierCount <= 2
@@ -620,36 +623,26 @@ export default function App() {
             );
           })}
         </div>
-      </div>
+      </main>
 
-      {/* MIDDLE DIVIDER & TOTAL BAR (TOP OF THE KEYBOARD) */}
-      <div className="shrink-0 flex flex-col justify-center">
-        {/* Horizontal Divider Line */}
-        <div className="w-full h-[1px] bg-white mb-1.5" />
-
-        {/* Total Readout & Delete Button */}
-        <div className="flex items-center justify-between gap-2 px-1 min-h-8">
-          <div className="flex-1 text-center font-bold text-xl sm:text-2xl font-mono tracking-tight text-white tabular-nums flex flex-wrap items-baseline justify-center gap-x-2">
+      {/* TOTAL BAR & DELETE */}
+      <div className="shrink-0 border-t border-zinc-800 pt-2 pb-1.5">
+        <div className="flex items-center justify-between gap-2 px-0.5 min-h-10">
+          <div className="flex-1 text-center font-bold text-2xl font-mono tracking-tight text-white tabular-nums flex flex-wrap items-baseline justify-center gap-x-2">
             <span>Total: {formatNumber(overallTotal)}</span>
             {multiplier !== 1 && (
-              <span className="text-xs sm:text-sm text-zinc-400 font-normal">
+              <span className="text-xs text-zinc-400 font-normal">
                 ({formatNumber(overallTotal)} × {formatNumber(multiplier)} ={' '}
                 {formatNumber(calculatedResult)})
               </span>
             )}
           </div>
 
-          {/* Delete / Backspace button (works for typing buffer AND committed cells) */}
           <button
             type="button"
             onClick={handleBackspace}
-            disabled={
-              !currentBuffer &&
-              overallTotal === 0 &&
-              activeCell[0] === 0 &&
-              activeCell[1] === 0
-            }
-            className="px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 hover:border-white disabled:opacity-30 disabled:hover:border-zinc-700 rounded-lg text-xs text-white flex items-center justify-center cursor-pointer disabled:cursor-not-allowed shrink-0 transition-colors"
+            disabled={isDeleteDisabled}
+            className="h-10 w-12 bg-zinc-950 border border-zinc-700 hover:border-white active:bg-white active:text-black disabled:opacity-30 disabled:hover:border-zinc-700 rounded-xl text-white flex items-center justify-center cursor-pointer disabled:cursor-not-allowed shrink-0 transition-all"
             aria-label="Delete"
             title="Delete"
           >
@@ -658,83 +651,24 @@ export default function App() {
         </div>
       </div>
 
-      {/* BOTTOM HALF: THE KEYPAD (3 COLUMNS x 4 ROWS) */}
-      <div className="shrink-0 pt-1.5 pb-0.5">
-        <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
-          {/* Row 1 */}
-          <button
-            type="button"
-            onClick={() => handleDigit('1')}
-            className="h-12 sm:h-13 rounded-2xl border-2 border-white bg-black text-white text-3xl font-semibold flex items-center justify-center active:bg-white active:text-black transition-colors cursor-pointer"
-          >
-            1
-          </button>
-          <button
-            type="button"
-            onClick={() => handleDigit('2')}
-            className="h-12 sm:h-13 rounded-2xl border-2 border-white bg-black text-white text-3xl font-semibold flex items-center justify-center active:bg-white active:text-black transition-colors cursor-pointer"
-          >
-            2
-          </button>
-          <button
-            type="button"
-            onClick={() => handleDigit('3')}
-            className="h-12 sm:h-13 rounded-2xl border-2 border-white bg-black text-white text-3xl font-semibold flex items-center justify-center active:bg-white active:text-black transition-colors cursor-pointer"
-          >
-            3
-          </button>
+      {/* KEYPAD (3 COLUMNS x 4 ROWS) */}
+      <div className="shrink-0 pt-0.5">
+        <div className="grid grid-cols-3 gap-2">
+          {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
+            <button
+              key={digit}
+              type="button"
+              onClick={() => handleDigit(digit)}
+              className="h-[52px] sm:h-14 rounded-2xl border border-zinc-700 bg-zinc-950 hover:border-zinc-500 text-white text-2xl sm:text-3xl font-semibold flex items-center justify-center active:bg-white active:text-black active:scale-[0.97] transition-all cursor-pointer"
+            >
+              {digit}
+            </button>
+          ))}
 
-          {/* Row 2 */}
-          <button
-            type="button"
-            onClick={() => handleDigit('4')}
-            className="h-12 sm:h-13 rounded-2xl border-2 border-white bg-black text-white text-3xl font-semibold flex items-center justify-center active:bg-white active:text-black transition-colors cursor-pointer"
-          >
-            4
-          </button>
-          <button
-            type="button"
-            onClick={() => handleDigit('5')}
-            className="h-12 sm:h-13 rounded-2xl border-2 border-white bg-black text-white text-3xl font-semibold flex items-center justify-center active:bg-white active:text-black transition-colors cursor-pointer"
-          >
-            5
-          </button>
-          <button
-            type="button"
-            onClick={() => handleDigit('6')}
-            className="h-12 sm:h-13 rounded-2xl border-2 border-white bg-black text-white text-3xl font-semibold flex items-center justify-center active:bg-white active:text-black transition-colors cursor-pointer"
-          >
-            6
-          </button>
-
-          {/* Row 3 */}
-          <button
-            type="button"
-            onClick={() => handleDigit('7')}
-            className="h-12 sm:h-13 rounded-2xl border-2 border-white bg-black text-white text-3xl font-semibold flex items-center justify-center active:bg-white active:text-black transition-colors cursor-pointer"
-          >
-            7
-          </button>
-          <button
-            type="button"
-            onClick={() => handleDigit('8')}
-            className="h-12 sm:h-13 rounded-2xl border-2 border-white bg-black text-white text-3xl font-semibold flex items-center justify-center active:bg-white active:text-black transition-colors cursor-pointer"
-          >
-            8
-          </button>
-          <button
-            type="button"
-            onClick={() => handleDigit('9')}
-            className="h-12 sm:h-13 rounded-2xl border-2 border-white bg-black text-white text-3xl font-semibold flex items-center justify-center active:bg-white active:text-black transition-colors cursor-pointer"
-          >
-            9
-          </button>
-
-          {/* Row 4: 0, .5, and Enter / Commit */}
           <button
             type="button"
             onClick={() => handleDigit('0')}
-            className="h-12 sm:h-13 rounded-2xl border-2 border-white bg-black text-white text-3xl font-semibold flex items-center justify-center active:bg-white active:text-black transition-colors cursor-pointer"
+            className="h-[52px] sm:h-14 rounded-2xl border border-zinc-700 bg-zinc-950 hover:border-zinc-500 text-white text-2xl sm:text-3xl font-semibold flex items-center justify-center active:bg-white active:text-black active:scale-[0.97] transition-all cursor-pointer"
           >
             0
           </button>
@@ -742,7 +676,7 @@ export default function App() {
             type="button"
             onClick={handleHalf}
             title="Adds .5 (e.g. 10 -> 10.5, 0 -> 0.5)"
-            className="h-12 sm:h-13 rounded-2xl border-2 border-white bg-black text-white text-3xl font-semibold flex items-center justify-center active:bg-white active:text-black transition-colors cursor-pointer"
+            className="h-[52px] sm:h-14 rounded-2xl border border-zinc-700 bg-zinc-950 hover:border-zinc-500 text-white text-2xl font-bold flex items-center justify-center active:bg-white active:text-black active:scale-[0.97] transition-all cursor-pointer"
           >
             .5
           </button>
@@ -750,7 +684,7 @@ export default function App() {
             type="button"
             onClick={commitBuffer}
             title="Commit & Next Cell"
-            className="h-12 sm:h-13 rounded-2xl border-2 border-white bg-zinc-900 text-white text-xl font-bold flex items-center justify-center active:bg-white active:text-black transition-colors cursor-pointer"
+            className="h-[52px] sm:h-14 rounded-2xl bg-white text-black hover:bg-zinc-200 font-bold flex items-center justify-center active:bg-zinc-300 active:scale-[0.97] transition-all cursor-pointer"
           >
             <CornerDownLeft className="w-6 h-6 stroke-[2.5]" />
           </button>

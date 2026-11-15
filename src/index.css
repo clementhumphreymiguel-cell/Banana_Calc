@@ -7,24 +7,30 @@
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
+html,
+body {
+  overscroll-behavior: none;
+  background-color: #000000;
+}
+
 /* Optimize touch interactions */
 button, input, select, textarea {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Custom scrollbars */
+/* Subtle dark scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.2);
+  background: rgba(255, 255, 255, 0.16);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.4);
+  background: rgba(255, 255, 255, 0.3);
 }
